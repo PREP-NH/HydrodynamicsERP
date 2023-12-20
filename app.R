@@ -45,44 +45,22 @@ source_python("bedshearmaponly.py")
 # https://youtu.be/TioPn3x1GYo
 # https://youtu.be/P_lXrMkJeWQ
 # Shiny UI
+# Other libraries you might need...
+
+# Define your UI
 ui <- fluidPage(
-    tags$head(
-        tags$style(HTML("
-            .shiny-text-output, .shiny-verbatim-text-output {
-                text-align: left;
-                margin-top: 0px;
-                margin-bottom: 0px;
-            }
-            img {
-                width: 100%;
-                height: auto;
-                display: block;
-                margin-bottom: 0px;
-            }
-            .shiny-output-container {
-                padding: 0px;
-            }
-        "))
-    ),
     titlePanel("Water Depth and Velocity with the Changing Tides"),
 
     # Checkbox for switching view
     checkboxInput("detailedView", "Switch to Detailed View", value = FALSE),
 
-    # Conditional panel for combinedSlider
+    # Breadcrumbs for combined view
     conditionalPanel(
         condition = "!input.detailedView",
-        HTML("<p>Select an index: High Tide (76), Low Tide (101), High Tide (125), Low Tide (200),
-                       High Tide (277), Low Tide (299), Max Velocity (311),
-                      High Tide (323), Low Tide (398), Max Velocity (410),
-                      High Tide (423)</p>"),
-        sliderTextInput("combinedSlider", "Time:", width = '100%',
-                        choices = c(76,101,125, 200, 277,
-                                    299, 311, 323, 398, 410, 423),
-                        selected = 76)
+        uiOutput("breadcrumbLinks")
     ),
 
-    # Conditional panel for timeSlide
+    # Slider for detailed view
     conditionalPanel(
         condition = "input.detailedView",
         sliderInput("timeSlide", "Time:", min = 1, max = 500, value = 1, width = '100%')
@@ -90,42 +68,41 @@ ui <- fluidPage(
 
     fluidRow(
         column(12,
-            textOutput("fileFeedback"),
-            verbatimTextOutput("vectorLengthsOutput"),
-            uiOutput("map2")
+               verbatimTextOutput("vectorLengthsOutput"),
+                  uiOutput("map2")
+
         )
     )
 )
 
+# Define your server logic
 server <- function(input, output, session) {
-    selectedSlide <- reactive({
-        if(input$detailedView) {
-            req(input$timeSlide)
-            input$timeSlide
-        } else {
-            req(input$combinedSlider)
-            input$combinedSlider
-        }
+    selectedBreadcrumb <- reactiveVal(76)
+
+    # Render breadcrumb links
+    output$breadcrumbLinks <- renderUI({
+        breadcrumbChoices <- c("High Tide: Friday 2019-8-30 5:30 AM ->" = 76, "Low Tide Friday 11:45 AM ->" = 101, "High Tide Friday 6 PM ->" = 126,
+                               "Low Tide: Saturday 8-31 12:45 AM ->" = 201, "High Tide Saturday 6:45 PM ->" = 225, "Low Tide Sunday: 9-1 1 AM" = 250,
+                               "-- Max Velocity into Great Bay Sunday: 9-1 4:15 PM" = 311,  "-- Max Velocity out of Great Bay Sunday: 9-1 11 PM" = 338)
+
+        do.call(tagList, lapply(names(breadcrumbChoices), function(name) {
+            a(href = "#", name,
+              onclick = sprintf("Shiny.setInputValue('selectedBreadcrumb', %d); return false;", breadcrumbChoices[[name]]))
+        }))
     })
 
-    mapResults <- reactive({
-        tryCatch({
-            make_map(selectedSlide())  # Call the Python function using the selected slider value
-        }, error = function(e) {
-            message("Error in make_map: ", e$message)
-            return(NULL)
-        })
+    # Observe breadcrumb selection
+    observeEvent(input$selectedBreadcrumb, {
+        selectedBreadcrumb(input$selectedBreadcrumb)
     })
 
+    # Initial map and vector lengths output
+    initialIndex <- as.character(76)
+    initialResults <- make_map(initialIndex)
+
+    # Display initial map and vector lengths output
     output$map2 <- renderUI({
-        res <- mapResults()  # Retrieve the results
-        if (is.null(res)) {
-            return(NULL)
-        }
-
-        map_file_path <- res[[1]]
-        message("Map generated: ", map_file_path)
-        img(src = map_file_path)  # Display the map image
+        img(src = initialResults[[1]])  # Display the initial map image
     })
 
     output$vectorLengthsOutput <- renderText({
@@ -146,8 +123,51 @@ server <- function(input, output, session) {
             "Data file not found."
         }
     })
+    # Reactive expression for map results
+    mapResults <- reactive({
+        # Determine the appropriate index to use
+        slideIndex <- if(input$detailedView) {
+            as.integer(req(input$timeSlide))  # Convert to integer
+        } else {
+            as.integer(req(selectedBreadcrumb()))  # Convert to integer
+        }
+
+        # Call the Python function using the determined slider value
+        tryCatch({
+            make_map(slideIndex)
+        }, error = function(e) {
+            message("Error in make_map: ", e$message)
+            return(NULL)
+        })
+    })
+    # Observe changes in mapResults and update UI accordingly
+    observe({
+        res <- mapResults()
+        if (!is.null(res)) {
+            output$map2 <- renderUI({
+                img(src = res[[1]])  # Display the map image
+            })
+          output$vectorLengthsOutput <- renderText({
+            res <- mapResults()  # Retrieve the results
+            if (is.null(res)) {
+                return("Data file not found.")
+            }
+
+            data_file_path <- res[[2]]
+            message("Data file generated: ", data_file_path)
+            if (file.exists(data_file_path)) {
+                data <- fromJSON(data_file_path)
+                outtext <- paste("Range of velocities in meters per second: ", data$vector_lengths_range)
+                outtext <- paste(outtext,"\nRange of depths in meters: ", data$depth_range)
+                paste(outtext,"\nBased on modeled hydrodynamics from: ", data$date_and_time)
+
+            } else {
+                "Data file not found."
+            }
+        })
+        }
+    })
 }
 
+# Run the application
 shinyApp(ui, server)
-
-# ... [Rest of the Code]
