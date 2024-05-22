@@ -54,7 +54,7 @@ def make_map(time_slide):
     # m = Basemap(projection="merc", llcrnrlon=min_lon, llcrnrlat=min_lat,
     #             urcrnrlon=max_lon, urcrnrlat=max_lat, resolution='c')
 
-    fig = plt.figure(figsize=(15, 8))
+    fig = plt.figure(figsize=(11, 5))
     # ax = fig.add_subplot(projection=ccrs.LambertConformal(central_lon, central_lat))
 
     ax = plt.axes(projection=ccrs.PlateCarree())
