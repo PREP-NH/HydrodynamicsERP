@@ -1,0 +1,1 @@
+As part of the Eelgrass Resilience Project ([See more here](https://nerrssciencecollaborative.org/project/McDowell21)). We developed this Shiny App to visualize the results from a Hydrodynamic model of the Great Bay of New Hampshire and Maine. We have embedded this into a Story Map [here] (https://arcg.is/1ePK0H2).
